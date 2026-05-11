@@ -1,0 +1,43 @@
+[project]
+name = "lab-devsecops-python"
+version = "0.1.0"
+description = "Laboratório de DevSecOps com Flask e OWASP Top 10"
+readme = "README.md"
+requires-python = ">=3.12"
+# Dependências de produção (o que o site precisa para rodar)
+dependencies = [
+    "flask>=2.0.0",
+]
+
+[dependency-groups]
+# Ferramentas de desenvolvimento e segurança (Shift Left)
+dev = [
+    "bandit>=1.7.0",   # Analisador estático de segurança (SAST)
+    "pytest>=8.0.0",   # Framework de testes unitários
+    "ruff>=0.3.0",     # Linter e formatador ultra-rápido (substitui flake8/isort)
+    "safety>=3.0.0",   # Verifica vulnerabilidades em dependências (SCA)
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+
+[tool.ruff]
+# Configuração do Linter (Shift Left: pegando erros de sintaxe e estilo)
+line-length = 88
+select = ["E", "F", "B", "I"] # Erros, Falhas, Bugbear (bugs comuns), Importações
+
+[tool.bandit]
+# Configuração do SAST (Segurança)
+exclude_dirs = ["tests", ".venv"]
+# Nível de severidade: reportar apenas Médio e Alto
+skips = ["B101"] # Exemplo: ignorar avisos de 'assert' (usado em testes)
+
+[tool.pytest.ini_options]
+# Configuração de Testes
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
