@@ -37,42 +37,36 @@ jobs:
           output: 'public/sbom.json'
 
       # 3. Verificação de Vulnerabilidades Críticas (SCA)
-      # Se houver falhas críticas, este passo falha e dispara a criação da Issue abaixo
+      # Adicionamos continue-on-error para o pipeline não "morrer" antes de salvar os dados
       - name: Scan for Critical Vulnerabilities
+        id: trivy_scan
         uses: aquasecurity/trivy-action@master
+        continue-on-error: true
         with:
           scan-type: 'fs'
           exit-code: '1'
           severity: 'CRITICAL,HIGH'
 
-      # 4. Criação de Issue automática em caso de falha
+      # 4. Criação de Issue (Só roda se o scan acima falhar)
       - name: Create Issue on Vulnerability Discovery
-        if: failure()
+        if: steps.trivy_scan.outcome == 'failure'
         run: |
-          gh issue create --title "Vulnerabilidades Críticas detectadas no SBOM" \
-                          --body "O scan do Trivy detectou falhas de segurança nas dependências. Verifique o arquivo sbom.json no dashboard."
+          gh issue create --title "Vulnerabilidades Críticas detectadas: $(date +'%d/%m/%Y')" \
+                          --body "O scan do Trivy detectou falhas críticas nas dependências. Verifique o arquivo sbom.json nos artefatos."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 5. Prepara os arquivos para o GitHub Pages
+      # 5. Prepara os arquivos para o Pages (Sempre roda)
       - name: Upload Pages Artifact
+        if: always()
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./public
 
-      # 6. Salva o SBOM como artefato para você baixar e usar no Streamlit/Pandas local
+      # 6. Salva o SBOM para o seu Dashboard Pandas (Sempre roda)
       - name: Upload Data for Analytics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: security-reports
           path: public/
-
-  deploy-report:
-    needs: check-security
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
