@@ -7,6 +7,7 @@ on:
 permissions:
   contents: write
   pages: write
+  issues: write    # Necessário para criar Issues
   id-token: write
 
 jobs:
@@ -22,24 +23,47 @@ jobs:
         run: uv sync --all-groups
 
       - name: Run Bandit (Generate HTML Report)
-        # O "|| true" garante que o pipeline continue para publicar o report mesmo com erro
+        # O || true evita que o pipeline pare aqui, permitindo gerar os outros reports
         run: |
           mkdir -p public
           uv run bandit -r src/ -f html -o public/index.html || true
 
-      - name: Upload Artifact
+      - name: Generate SBOM (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          format: 'cyclonedx'
+          output: 'public/sbom.json'
+
+      # Cria Issue se o Bandit encontrou algo (baseado no exit code do Bandit sem o || true)
+      - name: Check for Bandit Failures and Create Issue
+        if: github.ref == 'refs/heads/main'
+        run: |
+          if uv run bandit -r src/; then
+            echo "Nenhuma vulnerabilidade encontrada."
+          else
+            gh issue create --title "Falha de Segurança Detectada" --body "O Bandit encontrou vulnerabilidades. Verifique o dashboard no GitHub Pages."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./public
+
+      - name: Upload Security Data (Para Pandas/Streamlit)
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-data
+          path: public/
 
   deploy-report:
     needs: check-security
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-        
