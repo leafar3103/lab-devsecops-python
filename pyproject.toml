@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 # Dependências de produção (o que o site precisa para rodar)
 dependencies = [
     "flask>=2.0.0",
-    "requests==2.20.0",
+    "requests==2.33.0",
 ]
 
 [dependency-groups]
