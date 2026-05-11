@@ -7,7 +7,7 @@ on:
 permissions:
   contents: write
   pages: write
-  issues: write    # Necessário para criar Issues
+  issues: write
   id-token: write
 
 jobs:
@@ -22,12 +22,13 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-groups
 
-      - name: Run Bandit (Generate HTML Report)
-        # O || true evita que o pipeline pare aqui, permitindo gerar os outros reports
+      # 1. SAST - Bandit (Gera HTML para o Dashboard)
+      - name: Run Bandit (SAST)
         run: |
           mkdir -p public
           uv run bandit -r src/ -f html -o public/index.html || true
 
+      # 2. SBOM - Trivy (Gera JSON para o Pandas/Streamlit)
       - name: Generate SBOM (Trivy)
         uses: aquasecurity/trivy-action@master
         with:
@@ -35,27 +36,35 @@ jobs:
           format: 'cyclonedx'
           output: 'public/sbom.json'
 
-      # Cria Issue se o Bandit encontrou algo (baseado no exit code do Bandit sem o || true)
-      - name: Check for Bandit Failures and Create Issue
-        if: github.ref == 'refs/heads/main'
+      # 3. Verificação de Vulnerabilidades Críticas (SCA)
+      # Se houver falhas críticas, este passo falha e dispara a criação da Issue abaixo
+      - name: Scan for Critical Vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+
+      # 4. Criação de Issue automática em caso de falha
+      - name: Create Issue on Vulnerability Discovery
+        if: failure()
         run: |
-          if uv run bandit -r src/; then
-            echo "Nenhuma vulnerabilidade encontrada."
-          else
-            gh issue create --title "Falha de Segurança Detectada" --body "O Bandit encontrou vulnerabilidades. Verifique o dashboard no GitHub Pages."
-          fi
+          gh issue create --title "Vulnerabilidades Críticas detectadas no SBOM" \
+                          --body "O scan do Trivy detectou falhas de segurança nas dependências. Verifique o arquivo sbom.json no dashboard."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # 5. Prepara os arquivos para o GitHub Pages
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./public
 
-      - name: Upload Security Data (Para Pandas/Streamlit)
+      # 6. Salva o SBOM como artefato para você baixar e usar no Streamlit/Pandas local
+      - name: Upload Data for Analytics
         uses: actions/upload-artifact@v4
         with:
-          name: security-data
+          name: security-reports
           path: public/
 
   deploy-report:
